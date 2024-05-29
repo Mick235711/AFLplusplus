@@ -280,14 +280,14 @@ edit_trace delta_edit(const edit_trace& trace, const byte_array& orig)
     return cur_trace;
 }
 
-extern "C" void entry_point(void* fsrv, void* mem, int len)
+extern "C" void entry_point(void* fsrv, void* mem, int* len_ptr)
 {
     server = fsrv;
     auto orig = to_bytes("hello");
     // auto crash = to_bytes("g;odbye");
-    byte_array crash(len);
+    byte_array crash(*len_ptr);
     auto ptr = (std::byte*)mem;
-    for (int i = 0; i < len; ++i) crash[i] = ptr[i];
+    for (int i = 0; i < *len_ptr; ++i) crash[i] = ptr[i];
     cout << "Original test case: " << orig << "\n";
     cout << "Original crash: " << crash << "\n";
 
@@ -301,4 +301,6 @@ extern "C" void entry_point(void* fsrv, void* mem, int len)
     cout << "Optimal distance: " << new_trace.size() << "\n";
     auto result2 = apply_edits(new_trace, orig, {}, true);
     cout << "Optimal result: " << result2 << "\n";
+    *len_ptr = result2.size();
+    for (int i = 0; i < result2.size(); ++i) ptr[i] = result2[i];
 }
