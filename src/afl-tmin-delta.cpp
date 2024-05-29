@@ -284,7 +284,10 @@ extern "C" void entry_point(void* fsrv, void* mem, int len)
 {
     server = fsrv;
     auto orig = to_bytes("hello");
-    auto crash = to_bytes("g;odbye");
+    // auto crash = to_bytes("g;odbye");
+    byte_array crash(len);
+    auto ptr = (std::byte*)mem;
+    for (int i = 0; i < len; ++i) crash[i] = ptr[i];
     cout << "Original test case: " << orig << "\n";
     cout << "Original crash: " << crash << "\n";
 
