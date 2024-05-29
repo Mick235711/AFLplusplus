@@ -351,9 +351,16 @@ static u8 tmin_run_target(afl_forkserver_t *fsrv, u8 *mem, u32 len,
 
 }
 
-/* Actually minimize! */
+int run_target_wrap(void* fsrv, void* data, int len)
+{
+    return tmin_run_target(fsrv, data, len, 0);
+}
 
+/* Actually minimize! */
+void entry_point(void*, void*, int);
 static void minimize(afl_forkserver_t *fsrv) {
+    entry_point(fsrv, in_data, in_len);
+    return;
 
   static u32 alpha_map[256];
 
