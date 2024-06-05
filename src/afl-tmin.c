@@ -357,7 +357,7 @@ int run_target_wrap(void* fsrv, void* data, int len)
 }
 
 /* Actually minimize! */
-void entry_point(void*, void**, int*);
+void entry_point(void*, u8**, int*);
 static void minimize(afl_forkserver_t *fsrv) {
 
   static u32 alpha_map[256];

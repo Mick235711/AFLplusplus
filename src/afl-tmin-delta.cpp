@@ -320,11 +320,11 @@ byte_array find_closest_initial(const byte_array& crash)
     return *ptr_max;
 }
 
-extern "C" void entry_point(void* fsrv, void** mem, int* len_ptr)
+extern "C" void entry_point(void* fsrv, std::byte** mem, int* len_ptr)
 {
     server = fsrv;
     byte_array crash(*len_ptr);
-    auto ptr = (std::byte*)*mem;
+    auto& ptr = *mem;
     for (int i = 0; i < *len_ptr; ++i) crash[i] = ptr[i];
     auto orig = find_closest_initial(crash);
     // auto crash = to_bytes("g;odbye");
@@ -353,8 +353,7 @@ extern "C" void entry_point(void* fsrv, void** mem, int* len_ptr)
     else cout << "Optimal result length: " << result2.size() << "\n";
 
     // Return the memory and reallocate another one
-    mem = ck_realloc(*mem, result2.size());
-    ptr = (std::byte*)*mem;
+    *mem = static_cast<std::byte*>(ck_realloc(*mem, result2.size()));
     *len_ptr = result2.size();
     for (int i = 0; i < result2.size(); ++i) ptr[i] = result2[i];
 }
