@@ -13,6 +13,8 @@ using byte_array = std::vector<std::byte>;
 using mask_array = std::vector<bool>;
 using std::cout;
 
+bool verbose = false;
+
 byte_array to_bytes(std::string_view str)
 {
     byte_array result(str.size());
@@ -107,22 +109,25 @@ edit_distance_return_t edit_distance(const byte_array& from, const byte_array& t
             }
 
     // print the lookup table
-    cout << "Lookup table:\n";
-    for (int i = -1; i <= static_cast<int>(from.size()); ++i)
+    if (verbose)
     {
-        if (i <= 0) cout << " ";
-        else cout << static_cast<char>(from[i - 1]);
-        for (std::size_t j = 0; j <= to.size(); ++j)
+        cout << "Lookup table:\n";
+        for (int i = -1; i <= static_cast<int>(from.size()); ++i)
         {
-            cout << " ";
-            if (i == -1)
+            if (i <= 0) cout << " ";
+            else cout << static_cast<char>(from[i - 1]);
+            for (std::size_t j = 0; j <= to.size(); ++j)
             {
-                if (j == 0) cout << " ";
-                else cout << static_cast<char>(to[j - 1]);
+                cout << " ";
+                if (i == -1)
+                {
+                    if (j == 0) cout << " ";
+                    else cout << static_cast<char>(to[j - 1]);
+                }
+                else cout << lookup[i][j].dist;
             }
-            else cout << lookup[i][j].dist;
+            cout << "\n";
         }
-        cout << "\n";
     }
 
     return {lookup[from.size()][to.size()].dist, get_trace(lookup, to)};
@@ -271,7 +276,8 @@ edit_trace delta_edit(const edit_trace& trace, const byte_array& orig)
                 if (i < mask.size() && !mask[i]) continue;
                 new_trace.push_back(cur_trace[i]);
             }
-            cout << "Success!\nOriginal: " << cur_trace << "\nMasked: " << new_trace << "\n";
+            if (verbose) cout << "Success!\nOriginal: " << cur_trace << "\nMasked: " << new_trace << "\n";
+            else cout << "Success! Edit length reduced from " << cur_trace.size() << " to " << new_trace.size() << "\n";
             cur_trace = new_trace;
             parts = 2;
         }
@@ -288,19 +294,29 @@ extern "C" void entry_point(void* fsrv, void* mem, int* len_ptr)
     byte_array crash(*len_ptr);
     auto ptr = (std::byte*)mem;
     for (int i = 0; i < *len_ptr; ++i) crash[i] = ptr[i];
-    cout << "Original test case: " << orig << "\n";
-    cout << "Original crash: " << crash << "\n";
+    if (verbose)
+    {
+        cout << "Original test case: " << orig << "\n";
+        cout << "Original crash: " << crash << "\n";
+    }
+    else
+    {
+        cout << "Original test case length: " << orig.size() << "\n";
+        cout << "Original crash length: " << crash.size() << "\n";
+    }
 
     auto [dist, trace] = edit_distance(orig, crash);
     cout << "Original distance: " << dist << "\n";
-    auto result = apply_edits(trace, orig, {}, true);
-    cout << "Edit result: " << result << "\n";
+    auto result = apply_edits(trace, orig, {}, verbose);
+    if (verbose) cout << "Edit result: " << result << "\n";
+    else cout << "Edit result length: " << result.size() << "\n";
 
     cout << "==========\n";
     auto new_trace = delta_edit(trace, orig);
     cout << "Optimal distance: " << new_trace.size() << "\n";
-    auto result2 = apply_edits(new_trace, orig, {}, true);
-    cout << "Optimal result: " << result2 << "\n";
+    auto result2 = apply_edits(new_trace, orig, {}, verbose);
+    if (verbose) cout << "Optimal result: " << result2 << "\n";
+    else cout << "Optimal result length: " << result2.size() << "\n";
     *len_ptr = result2.size();
     for (int i = 0; i < result2.size(); ++i) ptr[i] = result2[i];
 }
