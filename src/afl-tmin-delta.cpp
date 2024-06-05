@@ -248,20 +248,24 @@ std::optional<mask_array> test_partitions(edit_trace& trace, const byte_array& o
         mask_array mask(trace.size(), false);
         for (auto j = start; j < end; ++j) mask[j] = true;
         auto result = apply_edits(trace, orig, mask);
-        cout << "Mask(" << start << "-" << end - 1 << ") = ";
-        if (verbose) cout << result << "\n";
-        else cout << "(length " << result.size() << ")\n";
-        if (crash_predicate(result)) return mask;
+        if (verbose) cout << "Mask(" << start << "-" << end - 1 << ") = " << result << "\n";
+        if (crash_predicate(result))
+        {
+            if (!verbose) cout << "Mask(" << start << "-" << end - 1 << ") = (length " << result.size() << ")\n";
+            return mask;
+        }
 
         // Also test the complement
         auto compl_mask = mask;
         for (std::size_t j = 0; j < compl_mask.size(); ++j)
             compl_mask[j] = !compl_mask[j];
         auto compl_result = apply_edits(trace, orig, compl_mask);
-        cout << "~Mask(" << start << "-" << end - 1 << ") = ";
-        if (verbose) cout << compl_result << "\n";
-        else cout << "(length " << compl_result.size() << ")\n";
-        if (crash_predicate(compl_result)) return compl_mask;
+        if (verbose) cout << "~Mask(" << start << "-" << end - 1 << ") = " << compl_result << "\n";
+        if (crash_predicate(compl_result))
+        {
+            if (!verbose) cout << "~Mask(" << start << "-" << end - 1 << ") = (length" << compl_result.size() << ")\n";
+            return compl_mask;
+        }
         start = end;
     }
     cout << "Failed!\n";
