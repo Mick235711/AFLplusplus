@@ -8,6 +8,7 @@
 #include <optional>
 #include <variant>
 #include <filesystem>
+#include "alloc-inl.h"
 
 extern "C" int run_target_wrap(void*, void*, int); // server, memory, length
 
@@ -267,7 +268,7 @@ std::optional<mask_array> test_partitions(edit_trace& trace, const byte_array& o
         if (verbose) cout << "~Mask(" << start << "-" << end - 1 << ") = " << compl_result << "\n";
         if (crash_predicate(compl_result))
         {
-            if (!verbose) cout << "~Mask(" << start << "-" << end - 1 << ") = (length" << compl_result.size() << ")\n";
+            if (!verbose) cout << "~Mask(" << start << "-" << end - 1 << ") = (length " << compl_result.size() << ")\n";
             return compl_mask;
         }
         start = end;
@@ -319,11 +320,11 @@ byte_array find_closest_initial(const byte_array& crash)
     return *ptr_max;
 }
 
-extern "C" void entry_point(void* fsrv, void* mem, int* len_ptr)
+extern "C" void entry_point(void* fsrv, void** mem, int* len_ptr)
 {
     server = fsrv;
     byte_array crash(*len_ptr);
-    auto ptr = (std::byte*)mem;
+    auto ptr = (std::byte*)*mem;
     for (int i = 0; i < *len_ptr; ++i) crash[i] = ptr[i];
     auto orig = find_closest_initial(crash);
     // auto crash = to_bytes("g;odbye");
@@ -350,6 +351,10 @@ extern "C" void entry_point(void* fsrv, void* mem, int* len_ptr)
     auto result2 = apply_edits(new_trace, orig, {}, verbose);
     if (verbose) cout << "Optimal result: " << result2 << "\n";
     else cout << "Optimal result length: " << result2.size() << "\n";
+
+    // Return the memory and reallocate another one
+    mem = ck_realloc(*mem, result2.size());
+    ptr = (std::byte*)*mem;
     *len_ptr = result2.size();
     for (int i = 0; i < result2.size(); ++i) ptr[i] = result2[i];
 }
