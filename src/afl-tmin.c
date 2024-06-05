@@ -837,13 +837,14 @@ static void usage(u8 *argv0) {
 }
 
 /* Main entry point */
-
+void read_testcase_dir(void*);
 int main(int argc, char **argv_orig, char **envp) {
 
   s32 opt;
   u8  mem_limit_given = 0, timeout_given = 0, unicorn_mode = 0, use_wine = 0,
      del_limit_given = 0;
   char **use_argv;
+  u8 *in_dir = NULL;
 
   char **argv = argv_cpy_dup(argc, argv_orig);
 
@@ -858,7 +859,7 @@ int main(int argc, char **argv_orig, char **envp) {
 
   SAYF(cCYA "afl-tmin" VERSION cRST " by Michal Zalewski\n");
 
-  while ((opt = getopt(argc, argv, "+i:o:f:m:t:l:B:xeAOQUWXYHh")) > 0) {
+  while ((opt = getopt(argc, argv, "+i:d:o:f:m:t:l:B:xeAOQUWXYHh")) > 0) {
 
     switch (opt) {
 
@@ -866,6 +867,11 @@ int main(int argc, char **argv_orig, char **envp) {
 
         if (in_file) { FATAL("Multiple -i options not supported"); }
         in_file = optarg;
+        break;
+
+      case 'd':
+        if (in_dir) { FATAL("Multiple -d options not supported"); }
+        in_dir = optarg;
         break;
 
       case 'o':
@@ -1243,6 +1249,7 @@ int main(int argc, char **argv_orig, char **envp) {
   fsrv->shmem_fuzz = map + sizeof(u32);
 
   read_initial_file();
+  read_testcase_dir(in_dir);
 
 #ifdef __linux__
   if (!fsrv->nyx_mode) { (void)check_binary_signatures(fsrv->target_path); }

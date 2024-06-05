@@ -1,4 +1,5 @@
 #include <iostream>
+#include <fstream>
 #include <vector>
 #include <string>
 #include <string_view>
@@ -6,14 +7,17 @@
 #include <algorithm>
 #include <optional>
 #include <variant>
+#include <filesystem>
 
 extern "C" int run_target_wrap(void*, void*, int); // server, memory, length
 
 using byte_array = std::vector<std::byte>;
 using mask_array = std::vector<bool>;
 using std::cout;
+namespace fs = std::filesystem;
 
 bool verbose = false;
+std::vector<byte_array> input_testcases;
 
 byte_array to_bytes(std::string_view str)
 {
@@ -298,14 +302,31 @@ edit_trace delta_edit(const edit_trace& trace, const byte_array& orig)
     return cur_trace;
 }
 
+byte_array find_closest_initial(const byte_array& crash)
+{
+    if (input_testcases.empty()) throw std::logic_error("No testcases specified!");
+    std::size_t min_dist = static_cast<std::size_t>(-1);
+    const byte_array* ptr_max{nullptr};
+    for (const auto& testcase : input_testcases)
+    {
+        auto [dist, _] = edit_distance(testcase, crash);
+        if (dist < min_dist)
+        {
+            min_dist = dist;
+            ptr_max = &testcase;
+        }
+    }
+    return *ptr_max;
+}
+
 extern "C" void entry_point(void* fsrv, void* mem, int* len_ptr)
 {
     server = fsrv;
-    auto orig = to_bytes("hello");
-    // auto crash = to_bytes("g;odbye");
     byte_array crash(*len_ptr);
     auto ptr = (std::byte*)mem;
     for (int i = 0; i < *len_ptr; ++i) crash[i] = ptr[i];
+    auto orig = find_closest_initial(crash);
+    // auto crash = to_bytes("g;odbye");
     if (verbose)
     {
         cout << "Original test case: " << orig << "\n";
@@ -331,4 +352,47 @@ extern "C" void entry_point(void* fsrv, void* mem, int* len_ptr)
     else cout << "Optimal result length: " << result2.size() << "\n";
     *len_ptr = result2.size();
     for (int i = 0; i < result2.size(); ++i) ptr[i] = result2[i];
+}
+
+void add_testcase(const fs::path& path)
+{
+    std::ifstream file_in{path, std::ios::in | std::ios::binary};
+    file_in.unsetf(std::ios::skipws); // don't skip newline
+
+    // get file size
+    file_in.seekg(0, std::ios::end);
+    std::streampos file_size = file_in.tellg();
+    file_in.seekg(0, std::ios::beg);
+
+    // read
+    byte_array contents(file_size);
+    file_in.read(reinterpret_cast<char*>(contents.data()), file_size);
+    cout << "Successfully read " << file_size << " bytes from " << path << "\n";
+    input_testcases.push_back(std::move(contents));
+}
+
+extern "C" void read_testcase_dir(void* dir_ptr)
+{
+    input_testcases.clear();
+    if (dir_ptr == nullptr)
+    {
+        cout << "Warning: No test case specified. Use \"hello\" as default test case.\n";
+        input_testcases.push_back(to_bytes("hello"));
+        return;
+    }
+    std::string dir_str(static_cast<char*>(dir_ptr));
+    fs::path dir_path(std::move(dir_str));
+    if (!fs::exists(dir_path))
+    {
+        cout << "Error! The given input path " << dir_path << " does not exist!\n";
+        throw std::logic_error("Path does not exist");
+    }
+    if (fs::is_directory(dir_path))
+    {
+        for (const auto& entry : fs::directory_iterator{dir_path})
+            if (fs::is_regular_file(entry))
+                add_testcase(entry);
+    }
+    else if (fs::is_regular_file(dir_path)) add_testcase(dir_path);
+    cout << "Read " << input_testcases.size() << " test cases.\n";
 }
