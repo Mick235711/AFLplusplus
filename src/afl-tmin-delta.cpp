@@ -191,22 +191,26 @@ std::ostream& operator<<(std::ostream& out, const edit_trace& trace)
 // apply edits
 void apply_edit(edit single_edit, byte_array& orig, bool print = false)
 {
+    if (orig.empty()) return;
     auto preserve = orig;
     if (single_edit.index() == INS)
     {
         auto [index, data] = std::get<INS>(single_edit);
+        if (index >= orig.size()) index = orig.size();
         orig.insert(orig.begin() + index, data);
         if (print) cout << "Insert " << data << " at " << index;
     }
     else if (single_edit.index() == DEL)
     {
         auto index = std::get<DEL>(single_edit);
+        if (index >= orig.size()) index = orig.size() - 1;
         orig.erase(orig.begin() + index);
         if (print) cout << "Delete " << index;
     }
     else if (single_edit.index() == SUB)
     {
         auto [index, data] = std::get<SUB>(single_edit);
+        if (index >= orig.size()) index = orig.size() - 1;
         orig[index] = data;
         if (print) cout << "Replace " << data << " at " << index;
     }
