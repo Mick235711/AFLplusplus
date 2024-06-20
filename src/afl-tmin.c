@@ -638,6 +638,12 @@ finalize_all:
 
 }
 
+void clear_bitmap(void* server)
+{
+  afl_forkserver_t* fsrv = (afl_forkserver_t*)server;
+  memset(fsrv->trace_bits, 0, fsrv->map_size);
+}
+
 void print_bitmap(void* server, FILE* fp)
 {
   afl_forkserver_t* fsrv = (afl_forkserver_t*)server;

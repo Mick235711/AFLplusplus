@@ -12,6 +12,7 @@
 #include "alloc-inl.h"
 
 extern "C" int run_target_wrap(void*, void*, int); // server, memory, length
+extern "C" void clear_bitmap(void*);
 extern "C" void print_bitmap(void*, FILE*);
 
 using byte_array = std::vector<std::byte>;
@@ -340,6 +341,8 @@ extern "C" void entry_point(void* fsrv, std::byte** mem, int* len_ptr)
         cout << "Original test case length: " << orig.size() << "\n";
         cout << "Original crash length: " << crash.size() << "\n";
     }
+    clear_bitmap(server);
+    crash_predicate(crash);
     FILE* fp = fopen("orig-bitmap.bin", "wb");
     print_bitmap(server, fp);
     fclose(fp);
@@ -358,6 +361,8 @@ extern "C" void entry_point(void* fsrv, std::byte** mem, int* len_ptr)
     if (verbose) cout << "Optimal result: " << result2 << "\n";
     else cout << "Optimal result length: " << result2.size() << "\n";
 
+    clear_bitmap(server);
+    crash_predicate(result2);
     fp = fopen("final-bitmap.bin", "wb");
     print_bitmap(server, fp);
     fclose(fp);
