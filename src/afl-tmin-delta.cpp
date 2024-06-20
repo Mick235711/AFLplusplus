@@ -11,6 +11,7 @@
 #include "alloc-inl.h"
 
 extern "C" int run_target_wrap(void*, void*, int); // server, memory, length
+extern "C" void print_bitmap(void*);
 
 using byte_array = std::vector<std::byte>;
 using mask_array = std::vector<bool>;
@@ -338,6 +339,8 @@ extern "C" void entry_point(void* fsrv, std::byte** mem, int* len_ptr)
         cout << "Original test case length: " << orig.size() << "\n";
         cout << "Original crash length: " << crash.size() << "\n";
     }
+    cout << "Original bitmap:";
+    print_bitmap(server);
 
     auto [dist, trace] = edit_distance(orig, crash);
     cout << "Original distance: " << dist << "\n";
@@ -351,6 +354,9 @@ extern "C" void entry_point(void* fsrv, std::byte** mem, int* len_ptr)
     auto result2 = apply_edits(new_trace, orig, {}, verbose);
     if (verbose) cout << "Optimal result: " << result2 << "\n";
     else cout << "Optimal result length: " << result2.size() << "\n";
+
+    cout << "Final bitmap:";
+    print_bitmap(server);
 
     // Return the memory and reallocate another one
     *mem = static_cast<std::byte*>(ck_realloc(*mem, result2.size()));

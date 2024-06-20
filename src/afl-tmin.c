@@ -638,6 +638,15 @@ finalize_all:
 
 }
 
+void print_bitmap(void* server)
+{
+  afl_forkserver_t* fsrv = (afl_forkserver_t*)server;
+  for (u32 i = 0; i < fsrv->map_size; i++) {
+    if (!fsrv->trace_bits[i]) { continue; }
+    printf("%06u:%u\n", i, fsrv->trace_bits[i]);
+  }
+}
+
 /* Handle Ctrl-C and the like. */
 
 static void handle_stop_sig(int sig) {
