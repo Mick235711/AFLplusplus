@@ -1,3 +1,4 @@
+#include <cstdio>
 #include <iostream>
 #include <fstream>
 #include <vector>
@@ -11,7 +12,7 @@
 #include "alloc-inl.h"
 
 extern "C" int run_target_wrap(void*, void*, int); // server, memory, length
-extern "C" void print_bitmap(void*);
+extern "C" void print_bitmap(void*, FILE*);
 
 using byte_array = std::vector<std::byte>;
 using mask_array = std::vector<bool>;
@@ -339,8 +340,10 @@ extern "C" void entry_point(void* fsrv, std::byte** mem, int* len_ptr)
         cout << "Original test case length: " << orig.size() << "\n";
         cout << "Original crash length: " << crash.size() << "\n";
     }
-    cout << "Original bitmap:";
-    print_bitmap(server);
+    FILE* fp = fopen("orig-bitmap.bin", "wb");
+    print_bitmap(server, fp);
+    fclose(fp);
+    cout << "Original bitmap stored to orig-bitmap.bin\n";
 
     auto [dist, trace] = edit_distance(orig, crash);
     cout << "Original distance: " << dist << "\n";
@@ -355,8 +358,10 @@ extern "C" void entry_point(void* fsrv, std::byte** mem, int* len_ptr)
     if (verbose) cout << "Optimal result: " << result2 << "\n";
     else cout << "Optimal result length: " << result2.size() << "\n";
 
-    cout << "Final bitmap:";
-    print_bitmap(server);
+    fp = fopen("final-bitmap.bin", "wb");
+    print_bitmap(server, fp);
+    fclose(fp);
+    cout << "Final bitmap stored to final-bitmap.bin\n";
 
     // Return the memory and reallocate another one
     *mem = static_cast<std::byte*>(ck_realloc(*mem, result2.size()));
