@@ -26,6 +26,7 @@ private:
 public:
     void add_coverage(const byte_array& coverage, bool is_crash);
     std::vector<double> get_result(std::string_view mode) const;
+    void output_stats() const;
 };
 
 const std::unordered_map<std::string, SBFL::method_func_ptr> SBFL::methods = {
@@ -75,6 +76,11 @@ std::vector<double> SBFL::get_result(std::string_view mode) const
     return result;
 }
 
+void SBFL::output_stats() const
+{
+    cout << "Current stats: " << num_passed << " passed, " << num_failed << " failed.\n";
+}
+
 SBFL& global_sbfl()
 {
     // Meyers singleton
@@ -90,6 +96,7 @@ void add_coverage(const byte_array& coverage, bool is_crash)
 void display_result(std::string_view mode)
 {
     auto result = global_sbfl().get_result(mode);
+    global_sbfl().output_stats();
     std::vector<std::size_t> indices(result.size());
     std::iota(indices.begin(), indices.end(), 0);
     std::partial_sort(
