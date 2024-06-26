@@ -13,6 +13,7 @@
 extern "C" int run_target_wrap(void*, void*, int); // server, memory, length
 extern "C" void clear_bitmap(void*);
 extern "C" void* get_bitmap(void*, int*);
+extern "C" const char* get_mode();
 
 using byte_array = std::vector<std::byte>;
 using mask_array = std::vector<bool>;
@@ -21,6 +22,11 @@ namespace fs = std::filesystem;
 
 bool verbose = false;
 std::vector<byte_array> input_testcases;
+void* server = nullptr;
+
+// sbfl.cpp
+void add_coverage(const byte_array& coverage, bool is_crash);
+void display_result(std::string_view mode);
 
 byte_array to_bytes(std::string_view str)
 {
@@ -43,7 +49,7 @@ std::ostream& operator<<(std::ostream& out, const byte_array& data)
     return out << to_str(data);
 }
 
-void print_bitmap(std::ostream& out, void* server)
+void print_bitmap(std::ostream& out)
 {
     int map_size = 0;
     std::uint8_t* bitmap = static_cast<std::uint8_t*>(get_bitmap(server, &map_size));
@@ -52,7 +58,7 @@ void print_bitmap(std::ostream& out, void* server)
     }
 }
 
-void print_bitmap_visual(std::ostream& out, void* server)
+void print_bitmap_visual(std::ostream& out)
 {
     int map_size = 0;
     std::uint8_t* bitmap = static_cast<std::uint8_t*>(get_bitmap(server, &map_size));
@@ -63,7 +69,7 @@ void print_bitmap_visual(std::ostream& out, void* server)
     }
 }
 
-byte_array copy_bitmap(void* server)
+byte_array copy_bitmap()
 {
     int map_size = 0;
     std::uint8_t* bitmap = static_cast<std::uint8_t*>(get_bitmap(server, &map_size));
@@ -74,10 +80,17 @@ byte_array copy_bitmap(void* server)
     return result;
 }
 
-void* server = nullptr;
 bool crash_predicate(const byte_array& data)
 {
     return run_target_wrap(server, (void*)data.data(), data.size());
+}
+
+bool crash_predicate_with_sbfl(const byte_array& data)
+{
+    clear_bitmap(server);
+    auto result = crash_predicate(data);
+    add_coverage(copy_bitmap(), result);
+    return result;
 }
 
 // Edit distance implementation
@@ -287,7 +300,7 @@ std::optional<mask_array> test_partitions(edit_trace& trace, const byte_array& o
         for (auto j = start; j < end; ++j) mask[j] = true;
         auto result = apply_edits(trace, orig, mask);
         if (verbose) cout << "Mask(" << start << "-" << end - 1 << ") = " << result << "\n";
-        if (crash_predicate(result))
+        if (crash_predicate_with_sbfl(result))
         {
             if (!verbose) cout << "Mask(" << start << "-" << end - 1 << ") = (length " << result.size() << ")\n";
             return mask;
@@ -299,7 +312,7 @@ std::optional<mask_array> test_partitions(edit_trace& trace, const byte_array& o
             compl_mask[j] = !compl_mask[j];
         auto compl_result = apply_edits(trace, orig, compl_mask);
         if (verbose) cout << "~Mask(" << start << "-" << end - 1 << ") = " << compl_result << "\n";
-        if (crash_predicate(compl_result))
+        if (crash_predicate_with_sbfl(compl_result))
         {
             if (!verbose) cout << "~Mask(" << start << "-" << end - 1 << ") = (length " << compl_result.size() << ")\n";
             return compl_mask;
@@ -392,10 +405,10 @@ extern "C" void entry_point(void* fsrv, std::byte** mem, int* len_ptr)
     }
     clear_bitmap(server);
     crash_predicate(crash);
-    auto map1 = copy_bitmap(server);
+    auto map1 = copy_bitmap();
     {
         std::ofstream out{"orig-bitmap.bin", std::ios::out | std::ios::binary};
-        print_bitmap(out, server);
+        print_bitmap(out);
     }
     cout << "Original bitmap stored to orig-bitmap.bin\n";
 
@@ -414,10 +427,10 @@ extern "C" void entry_point(void* fsrv, std::byte** mem, int* len_ptr)
 
     clear_bitmap(server);
     crash_predicate(result2);
-    auto map2 = copy_bitmap(server);
+    auto map2 = copy_bitmap();
     {
         std::ofstream out{"final-bitmap.bin", std::ios::out | std::ios::binary};
-        print_bitmap(out, server);
+        print_bitmap(out);
     }
     cout << "Final bitmap stored to final-bitmap.bin\n";
 
@@ -428,6 +441,9 @@ extern "C" void entry_point(void* fsrv, std::byte** mem, int* len_ptr)
     *mem = static_cast<std::byte*>(ck_realloc(*mem, result2.size()));
     *len_ptr = result2.size();
     for (int i = 0; i < result2.size(); ++i) ptr[i] = result2[i];
+
+    auto mode = get_mode();
+    if (mode != nullptr) display_result(mode);
 }
 
 void add_testcase(const fs::path& path)

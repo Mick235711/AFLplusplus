@@ -63,6 +63,8 @@ static u8 *mask_bitmap;                /* Mask for trace bits (-B)          */
 static u8 *in_file,                    /* Minimizer input test case         */
     *out_file, *output_file;           /* Minimizer output file             */
 
+static u8 *sbfl_mode;                  /* SBFL mode, can be ochiai or dstar */
+
 static u8 *in_data;                    /* Input data for trimming           */
 
 static u32 in_len,                     /* Input data length                 */
@@ -651,6 +653,8 @@ void* get_bitmap(void* server, int* map_size)
   return fsrv->trace_bits;
 }
 
+u8* get_mode(void) { return sbfl_mode; }
+
 /* Handle Ctrl-C and the like. */
 
 static void handle_stop_sig(int sig) {
@@ -872,7 +876,7 @@ int main(int argc, char **argv_orig, char **envp) {
 
   SAYF(cCYA "afl-tmin" VERSION cRST " by Michal Zalewski\n");
 
-  while ((opt = getopt(argc, argv, "+i:d:o:f:m:t:l:B:xeAOQUWXYHh")) > 0) {
+  while ((opt = getopt(argc, argv, "+i:d:o:f:m:M:t:l:B:xeAOQUWXYHh")) > 0) {
 
     switch (opt) {
 
@@ -971,6 +975,11 @@ int main(int argc, char **argv_orig, char **envp) {
       }
 
       break;
+
+      case 'M':
+        if (sbfl_mode) { FATAL("Multiple -d options not supported"); }
+        sbfl_mode = optarg;
+        break;
 
       case 't':
 
