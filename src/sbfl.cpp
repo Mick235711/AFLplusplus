@@ -30,7 +30,7 @@ public:
 };
 
 const std::unordered_map<std::string, SBFL::method_func_ptr> SBFL::methods = {
-    {"ochiai", [](stats s) { return s.e_f / std::sqrt((s.e_f + s.n_f) * (s.e_f + s.e_p)); }},
+    {"ochiai", [](stats s) { return s.e_f + s.e_p == 0 ? 0.0 : s.e_f / std::sqrt((s.e_f + s.n_f) * (s.e_f + s.e_p)); }},
     {"dstar", [](stats s) { return static_cast<double>(s.e_f * s.e_f) / (s.e_p + s.n_f); }}
 };
 
@@ -47,8 +47,8 @@ void SBFL::add_coverage(const byte_array& coverage, bool is_crash)
             cur_stats[i].n_p = num_passed;
         }
     }
-    for (int i = 0; i < coverage.size(); ++i)
-        if (coverage[i] == std::byte{0})
+    for (int i = 0; i < cur_stats.size(); ++i)
+        if (i >= coverage.size() || coverage[i] == std::byte{0})
         {
             // not executed
             if (is_crash) ++cur_stats[i].n_f;
@@ -101,7 +101,7 @@ void display_result(std::string_view mode)
     std::iota(indices.begin(), indices.end(), 0);
     std::partial_sort(
         indices.begin(), indices.begin() + show_top, indices.end(),
-        [&result](std::size_t a, std::size_t b) { return result[a] > result[b]; }
+        [&result](std::size_t a, std::size_t b) { return result[a] > result[b] || (result[a] == result[b] && a < b); }
     );
     for (int i = 0; i < show_top; ++i)
         cout << "#" << i << ": " << std::hex << "0x" << indices[i] << std::dec << " (" << result[indices[i]] << ")\n";
