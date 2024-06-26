@@ -63,6 +63,17 @@ void print_bitmap_visual(std::ostream& out, void* server)
     }
 }
 
+byte_array copy_bitmap(void* server)
+{
+    int map_size = 0;
+    std::uint8_t* bitmap = static_cast<std::uint8_t*>(get_bitmap(server, &map_size));
+    byte_array result(map_size);
+    for (int i = 0; i < map_size; i++) {
+        result[i] = static_cast<std::byte>(bitmap[i]); 
+    }
+    return result;
+}
+
 void* server = nullptr;
 bool crash_predicate(const byte_array& data)
 {
@@ -342,6 +353,25 @@ byte_array find_closest_initial(const byte_array& crash)
     return *ptr_max;
 }
 
+void compare_bitmap(const byte_array& map1, const byte_array& map2)
+{
+    cout << "map1 length = " << map1.size() << "\n";
+    auto length_diff = std::abs(static_cast<long>(map1.size()) - static_cast<long>(map2.size()));
+    auto min_length = std::min(map1.size(), map2.size());
+    cout << "map2 length = " << map2.size() << " (diff = " << length_diff << ")\n";
+    std::size_t diff_cnt = 0, abs_diff = 0, square_diff = 0;
+    for (int i = 0; i < min_length; ++i)
+    {
+        if (map1[i] != map2[i]) ++diff_cnt;
+        auto val1 = static_cast<long>(map1[i]);
+        auto val2 = static_cast<long>(map2[i]);
+        abs_diff += std::abs(val1 - val2);
+        square_diff += (val1 - val2) * (val1 - val2);
+    }
+    cout << "Total different byte count: " << diff_cnt << "\n";
+    cout << "abs diff = " << abs_diff << ", square diff = " << square_diff << "\n";
+}
+
 extern "C" void entry_point(void* fsrv, std::byte** mem, int* len_ptr)
 {
     server = fsrv;
@@ -362,6 +392,7 @@ extern "C" void entry_point(void* fsrv, std::byte** mem, int* len_ptr)
     }
     clear_bitmap(server);
     crash_predicate(crash);
+    auto map1 = copy_bitmap(server);
     {
         std::ofstream out{"orig-bitmap.bin", std::ios::out | std::ios::binary};
         print_bitmap(out, server);
@@ -383,11 +414,15 @@ extern "C" void entry_point(void* fsrv, std::byte** mem, int* len_ptr)
 
     clear_bitmap(server);
     crash_predicate(result2);
+    auto map2 = copy_bitmap(server);
     {
         std::ofstream out{"final-bitmap.bin", std::ios::out | std::ios::binary};
         print_bitmap(out, server);
     }
     cout << "Final bitmap stored to final-bitmap.bin\n";
+
+    cout << "\nBitmap comparison:\n";
+    compare_bitmap(map1, map2);
 
     // Return the memory and reallocate another one
     *mem = static_cast<std::byte*>(ck_realloc(*mem, result2.size()));
