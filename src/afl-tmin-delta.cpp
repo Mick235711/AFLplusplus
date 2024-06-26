@@ -1,4 +1,3 @@
-#include <cstdio>
 #include <iostream>
 #include <fstream>
 #include <vector>
@@ -13,7 +12,7 @@
 
 extern "C" int run_target_wrap(void*, void*, int); // server, memory, length
 extern "C" void clear_bitmap(void*);
-extern "C" void print_bitmap(void*, FILE*);
+extern "C" void* get_bitmap(void*, int*);
 
 using byte_array = std::vector<std::byte>;
 using mask_array = std::vector<bool>;
@@ -42,6 +41,26 @@ std::string to_str(const byte_array& data)
 std::ostream& operator<<(std::ostream& out, const byte_array& data)
 {
     return out << to_str(data);
+}
+
+void print_bitmap(std::ostream& out, void* server)
+{
+    int map_size = 0;
+    std::uint8_t* bitmap = static_cast<std::uint8_t*>(get_bitmap(server, &map_size));
+    for (int i = 0; i < map_size; i++) {
+        out << bitmap[i];
+    }
+}
+
+void print_bitmap_visual(std::ostream& out, void* server)
+{
+    int map_size = 0;
+    std::uint8_t* bitmap = static_cast<std::uint8_t*>(get_bitmap(server, &map_size));
+    for (int i = 0; i < map_size; i++) {
+        if (!bitmap[i]) continue;
+        out << std::setfill('0') << std::setw(6) << i;
+        out << bitmap[i] << '\n';
+    }
 }
 
 void* server = nullptr;
@@ -343,9 +362,10 @@ extern "C" void entry_point(void* fsrv, std::byte** mem, int* len_ptr)
     }
     clear_bitmap(server);
     crash_predicate(crash);
-    FILE* fp = fopen("orig-bitmap.bin", "wb");
-    print_bitmap(server, fp);
-    fclose(fp);
+    {
+        std::ofstream out{"orig-bitmap.bin", std::ios::out | std::ios::binary};
+        print_bitmap(out, server);
+    }
     cout << "Original bitmap stored to orig-bitmap.bin\n";
 
     auto [dist, trace] = edit_distance(orig, crash);
@@ -363,9 +383,10 @@ extern "C" void entry_point(void* fsrv, std::byte** mem, int* len_ptr)
 
     clear_bitmap(server);
     crash_predicate(result2);
-    fp = fopen("final-bitmap.bin", "wb");
-    print_bitmap(server, fp);
-    fclose(fp);
+    {
+        std::ofstream out{"final-bitmap.bin", std::ios::out | std::ios::binary};
+        print_bitmap(out, server);
+    }
     cout << "Final bitmap stored to final-bitmap.bin\n";
 
     // Return the memory and reallocate another one

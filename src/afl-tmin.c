@@ -644,13 +644,11 @@ void clear_bitmap(void* server)
   memset(fsrv->trace_bits, 0, fsrv->map_size);
 }
 
-void print_bitmap(void* server, FILE* fp)
+void* get_bitmap(void* server, int* map_size)
 {
   afl_forkserver_t* fsrv = (afl_forkserver_t*)server;
-  for (u32 i = 0; i < fsrv->map_size; i++) {
-    if (!fsrv->trace_bits[i]) { continue; }
-    fprintf(fp, "%06u:%u\n", i, fsrv->trace_bits[i]);
-  }
+  *map_size = fsrv->map_size;
+  return fsrv->trace_bits;
 }
 
 /* Handle Ctrl-C and the like. */
