@@ -404,7 +404,7 @@ extern "C" void entry_point(void* fsrv, std::byte** mem, int* len_ptr)
         cout << "Original crash length: " << crash.size() << "\n";
     }
     clear_bitmap(server);
-    crash_predicate(crash);
+    crash_predicate(orig);
     auto map1 = copy_bitmap();
     {
         std::ofstream out{"orig-bitmap.bin", std::ios::out | std::ios::binary};
