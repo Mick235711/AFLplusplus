@@ -21,8 +21,8 @@ Processor = Callable[[str], dict[str, Any]]
 
 def process_custom(output_dir: str) -> dict[str, Any]:
     """ Process bitmaps """
-    os.remove(os.path.join(output_dir, "orig-bitmap.bin"))
-    os.remove(os.path.join(output_dir, "final-bitmap.bin"))
+    os.remove("orig-bitmap.bin")
+    os.remove("final-bitmap.bin")
     return {}
 
 
@@ -68,7 +68,7 @@ def process_output(output: str) -> dict[str, Any]:
                 index = line.find("to") + 2
                 is_multi = True
                 key = "length_trace"
-            elif "length = " in line:
+            elif line.startswith("map") and "length = " in line:
                 index = line.find("=") + 1
                 if "(diff" in line:
                     assert line.endswith(")"), line
