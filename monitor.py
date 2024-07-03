@@ -132,9 +132,9 @@ class CrashMonitor(FileSystemEventHandler):
         super().__init__()
         assert os.path.isdir(output_dir), output_dir
         self.output_dir = output_dir
-        self.binary_list: dict[str, tuple[Runner, Processor | None]] = {
-            "Official afl-tmin": (run_official, None),
-            "Custom afl-tmin": (run_custom, process_custom)
+        self.binary_list: dict[str, tuple[Runner, Processor | None, str]] = {
+            "Official afl-tmin": (run_official, None, "official"),
+            "Custom afl-tmin": (run_custom, process_custom, "custom")
         }
         self.data: list[dict[str, Any]] = []
         self.store_content = store_content
@@ -145,23 +145,28 @@ class CrashMonitor(FileSystemEventHandler):
             return
         self.process(event.src_path)
 
-    def process(self, crash_file: str) -> None:
+    def process(self, crash_file: str, export_path: str | None = None) -> None:
         """ Process a crash file """
         assert os.path.isfile(crash_file), crash_file
         print(f"\n===> Detected new crash case: {crash_file}")
         crash_case = os.path.join(self.output_dir, "crash_case")
         crash_reduce = os.path.join(self.output_dir, "crash_reduce")
         shutil.copyfile(crash_file, crash_case)
+        if export_path is not None:
+            shutil.copyfile(crash_file, export_path)
         crash_case_size = os.path.getsize(crash_case)
         print(f"===> Copied {crash_case_size} bytes to {crash_case}")
 
         run_data: dict[
             str, tuple[str, float, int, dict[str, Any] | None, str | None]
         ] = {}
-        for name, (binary, processor) in self.binary_list.items():
+        for name, (binary, processor, suffix) in self.binary_list.items():
             print(f"\n===> Running {name.lower()}...")
             output, elapsed = binary(crash_case, crash_reduce)
             print(output)
+            if export_path is not None:
+                shutil.copyfile(
+                    crash_reduce, export_path + "_reduce_" + suffix)
             run_data[name] = (
                 output, elapsed, os.path.getsize(crash_reduce),
                 None if processor is None else processor(self.output_dir),
@@ -246,6 +251,7 @@ def main() -> None:
                         help="Store test case content in JSON output")
     parser.add_argument("--monitor-output", action="store_true",
                         help="Monitor output directory")
+    parser.add_argument("--export", required=False, help="Export directory")
     parser.add_argument("binary", nargs="+",
                         help="Testing binary (@@ for filename)")
     args = parser.parse_args()
@@ -253,6 +259,10 @@ def main() -> None:
     assert os.path.isdir(args.test_case_dir), args.test_case_dir
     assert os.path.isfile(args.official), args.official
     assert os.path.isfile(args.custom), args.custom
+    if args.export is not None:
+        if os.path.exists(args.export):
+            shutil.rmtree(args.export)
+        os.makedirs(args.export)
     if os.path.exists(args.output_dir):
         shutil.rmtree(args.output_dir)
     os.makedirs(args.output_dir)
@@ -264,12 +274,18 @@ def main() -> None:
         args.store_content
     )
     print("===> Loading initial crashes...")
+    cnt = 0
     for crash_file in os.listdir(args.input_dir):
+        cnt += 1
         if crash_file.lower() == "readme.txt":
             continue
         real_path = os.path.join(args.input_dir, crash_file)
         if os.path.isfile(real_path):
-            monitor.process(real_path)
+            monitor.process(
+                real_path,
+                None if args.export is None
+                else os.path.join(args.export, str(cnt))
+            )
 
     if not args.monitor_output:
         monitor.write_json("results.json")
