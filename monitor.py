@@ -122,8 +122,11 @@ def main() -> None:
     )
     print("====> Loading initial crashes...")
     for crash_file in os.listdir(args.input_dir):
-        if os.path.isfile(crash_file):
-            monitor.process(crash_file)
+        if crash_file.lower() == "readme.txt":
+            continue
+        real_path = os.path.join(args.input_dir, crash_file)
+        if os.path.isfile(real_path):
+            monitor.process(real_path)
 
     print("\n====> Observing crash directory...")
     observer = Observer()
