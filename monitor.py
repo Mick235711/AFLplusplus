@@ -244,6 +244,8 @@ def main() -> None:
     parser.add_argument("--custom", help="Path to custom afl-tmin")
     parser.add_argument("--store-content", action="store_true",
                         help="Store test case content in JSON output")
+    parser.add_argument("--monitor-output", action="store_true",
+                        help="Monitor output directory")
     parser.add_argument("binary", nargs="+",
                         help="Testing binary (@@ for filename)")
     args = parser.parse_args()
@@ -268,6 +270,10 @@ def main() -> None:
         real_path = os.path.join(args.input_dir, crash_file)
         if os.path.isfile(real_path):
             monitor.process(real_path)
+
+    if not args.monitor_output:
+        monitor.write_json("results.json")
+        return
 
     print("\n===> Observing crash directory...")
     observer = Observer()
