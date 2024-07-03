@@ -139,9 +139,9 @@ class CrashMonitor(FileSystemEventHandler):
         self.data: list[dict[str, Any]] = []
         self.store_content = store_content
 
-    def on_created(self, event: FileSystemEvent) -> None:
+    def on_any_event(self, event: FileSystemEvent) -> None:
         """ Event representing file/dir creation """
-        if not isinstance(event, FileCreatedEvent):
+        if not os.path.isfile(event.src_path):
             return
         self.process(event.src_path)
 
