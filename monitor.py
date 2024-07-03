@@ -8,6 +8,7 @@ import os
 import json
 import shutil
 import subprocess
+from pathlib import Path
 from timeit import default_timer as timer
 from typing import Any, Callable
 from watchdog.events import FileSystemEventHandler, FileCreatedEvent, \
@@ -119,7 +120,8 @@ class CrashMonitor(FileSystemEventHandler):
     """ Monitor a crash directory """
 
     def __init__(
-        self, output_dir: str, run_official: Runner, run_custom: Runner
+        self, output_dir: str, run_official: Runner, run_custom: Runner,
+        store_content: bool = False
     ) -> None:
         """ Constructor """
         super().__init__()
@@ -130,6 +132,7 @@ class CrashMonitor(FileSystemEventHandler):
             "Custom afl-tmin": (run_custom, process_custom)
         }
         self.data: list[dict[str, Any]] = []
+        self.store_content = store_content
 
     def on_created(self, event: FileSystemEvent) -> None:
         """ Event representing file/dir creation """
@@ -147,29 +150,38 @@ class CrashMonitor(FileSystemEventHandler):
         crash_case_size = os.path.getsize(crash_case)
         print(f"===> Copied {crash_case_size} bytes to {crash_case}")
 
-        run_data: dict[str, tuple[str, float, int, dict[str, Any] | None]] = {}
+        run_data: dict[
+            str, tuple[str, float, int, dict[str, Any] | None, str | None]
+        ] = {}
         for name, (binary, processor) in self.binary_list.items():
             print(f"\n===> Running {name.lower()}...")
             output, elapsed = binary(crash_case, crash_reduce)
             print(output)
             run_data[name] = (
                 output, elapsed, os.path.getsize(crash_reduce),
-                None if processor is None else processor(self.output_dir)
+                None if processor is None else processor(self.output_dir),
+                Path(crash_reduce).read_text() if self.store_content else None
             )
 
         self.data.append({
             "file_name": os.path.basename(crash_file),
             "original_size": crash_case_size,
-            "data": {}
         })
+        if self.store_content:
+            self.data[-1]["original"] = Path(crash_case).read_text()
+        self.data[-1]["data"] = {}
 
         print()
-        for name, (output, elapsed, reduced_size, data) in run_data.items():
+        for name, (
+            output, elapsed, reduced_size, data, content
+        ) in run_data.items():
             print(f"\n===> {name} statistics:")
             percent = (1 - reduced_size / crash_case_size) * 100
             print(f"===> Final file size: {reduced_size} " +
                   f"({percent:.1f}% reduction)")
             print(f"===> Elapsed time: {elapsed:.2f} seconds")
+            if content is not None:
+                self.data[-1]["data"][name]["reduced"] = content
             self.data[-1]["data"][name] = {
                 "reduced_size": reduced_size,
                 "elapsed_seconds": elapsed
@@ -226,6 +238,8 @@ def main() -> None:
     parser.add_argument("-d", "--test-case-dir", help="Testcase directory")
     parser.add_argument("--official", help="Path to official afl-tmin")
     parser.add_argument("--custom", help="Path to custom afl-tmin")
+    parser.add_argument("--store-content", action="store_true",
+                        help="Store test case content in JSON output")
     parser.add_argument("binary", nargs="+",
                         help="Testing binary (@@ for filename)")
     args = parser.parse_args()
@@ -240,7 +254,8 @@ def main() -> None:
     monitor = CrashMonitor(
         args.output_dir,
         run_afl_tmin(args.official, args.test_case_dir, args.binary),
-        run_afl_tmin(args.custom, args.test_case_dir, args.binary, True)
+        run_afl_tmin(args.custom, args.test_case_dir, args.binary, True),
+        args.store_content
     )
     print("===> Loading initial crashes...")
     for crash_file in os.listdir(args.input_dir):
