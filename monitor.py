@@ -4,23 +4,17 @@
 
 # Libraries
 import argparse
-import io
 import os
-import pty
-import selectors
-import sys
 import shutil
 import subprocess
-import termios
-import tty
 from timeit import default_timer as timer
-from typing import Any, Callable, TextIO
+from typing import Callable
 from watchdog.events import FileSystemEventHandler, FileCreatedEvent, \
     FileSystemEvent
 from watchdog.observers import Observer
 
 
-Runner = Callable[[str, str], tuple[str, float]]
+Runner = Callable[[str, str], float]
 
 
 class CrashMonitor(FileSystemEventHandler):
@@ -54,15 +48,13 @@ class CrashMonitor(FileSystemEventHandler):
         print(f"===> Copied {crash_case_size} bytes to {crash_case}")
 
         print("===> Running official afl-tmin...")
-        official_output, official_time = self.run_official(
-            crash_case, crash_official)
+        official_time = self.run_official(crash_case, crash_official)
         print("===> Official afl-tmin statistics:")
         crash_official_size = os.path.getsize(crash_official)
         official_percent = (1 - crash_official_size / crash_case_size) * 100
         print(f"===> Final file size: {crash_official_size} " +
               f"({official_percent:.1f}% reduction)")
         print(f"===> Elapsed time: {official_time:.2f} seconds")
-        print(official_output)
 
         if os.path.exists(crash_case):
             os.remove(crash_case)
@@ -77,62 +69,23 @@ def run_afl_tmin(
     add_d_option: bool = False
 ) -> Runner:
     """ Run afl-tmin, return the output """
-    def runner(crash_case: str, crash_reduce: str) -> tuple[str, float]:
-        # Save original tty setting then set it to raw mode
-        old_tty = termios.tcgetattr(sys.stdin)
-        tty.setraw(sys.stdin.fileno())
-
-        # Open pseudo-terminal to interact with subprocess
-        master_fd, slave_fd = pty.openpty()
-
+    def runner(crash_case: str, crash_reduce: str) -> float:
         # Create process
         start = timer()
-        process = subprocess.Popen(
+        process = subprocess.run(
             [afl_tmin_binary, "-i", crash_case, "-o", crash_reduce] + (
                 ["-d", test_case_dir] if add_d_option else []
             ) + ["--"] + execute_line,
-            bufsize=1, universal_newlines=True,
-            stdout=slave_fd, stderr=slave_fd
+            universal_newlines=True
         )
-
-        # Create callback function for process output
-        buf = io.StringIO()
-
-        def handle_output(stream: TextIO, _: Any) -> None:
-            # Because the process' output is line buffered, there's only ever
-            # one line to read when this function is called
-            line = os.fdopen(stream).readline()
-            buf.write(line)
-            sys.stdout.write(line)
-
-        # Register callback for an "available for read" event
-        selector = selectors.DefaultSelector()
-        selector.register(master_fd, selectors.EVENT_READ, handle_output)
-
-        # Loop until subprocess is terminated
-        while process.poll() is None:
-            # Wait for events and handle them with their registered callbacks
-            events = selector.select()
-            for key, mask in events:
-                callback = key.data
-                callback(key.fileobj, mask)
-
-        # Get process return code
-        return_code = process.wait()
-        selector.close()
         end = timer()
 
+        # Get process return code
+        return_code = process.returncode
         if return_code != 0:
             print(f"Warning: the process returned {return_code}!")
 
-        # Store buffered output
-        output = buf.getvalue()
-        buf.close()
-
-        # Restore tty settings back
-        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_tty)
-
-        return output, end - start
+        return end - start
     return runner
 
 
