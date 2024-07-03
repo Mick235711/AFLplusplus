@@ -40,16 +40,16 @@ def process_output(output: str) -> dict[str, Any]:
         key: str | None = None
         is_multi = True
         if "Block normalization complete" in line:
-            index2 = line.find("bytes replaced", index)
+            index2 = line.find("byte", index)
             key = "bytes_replaced"
         elif "Block removal complete" in line:
-            index2 = line.find("bytes deleted", index)
+            index2 = line.find("byte", index)
             key = "bytes_deleted"
         elif "Symbol minimization finished" in line:
-            index2 = line.find("symbols", index)
+            index2 = line.find("symbol", index)
             key = "symbols_replaced"
         elif "Character minimization done" in line:
-            index2 = line.find("bytes replaced", index)
+            index2 = line.find("byte", index)
             key = "character_bytes_replaced"
         else:
             index = line.find(":") + 1
@@ -81,9 +81,9 @@ def process_output(output: str) -> dict[str, Any]:
             elif line.startswith("abs diff = "):
                 for section in line.split(","):
                     assert "diff =" in section, line
-                    index = line.find("diff =")
-                    key = "map_" + line[:index].strip() + "_diff"
-                    data[key] = int(line[line.find("=") + 1:].strip())
+                    index = section.find("diff =")
+                    key = "map_" + section[:index].strip() + "_diff"
+                    data[key] = int(section[section.find("=") + 1:].strip())
                 continue
         if key is None:
             continue
@@ -173,7 +173,8 @@ class CrashMonitor(FileSystemEventHandler):
             self.data[-1]["data"][name] = {
                 "reduced_size": reduced_size,
                 "elapsed_seconds": elapsed
-            }.update(process_output(output))
+            }
+            self.data[-1]["data"][name].update(process_output(output))
             if data is not None:
                 self.data[-1]["data"][name].update(data)
 
