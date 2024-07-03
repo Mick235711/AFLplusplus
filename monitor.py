@@ -10,19 +10,21 @@ import selectors
 import sys
 import shutil
 import subprocess
+from timeit import default_timer as timer
 from typing import Any, Callable, TextIO
 from watchdog.events import FileSystemEventHandler, FileCreatedEvent, \
     FileSystemEvent
 from watchdog.observers import Observer
 
 
+Runner = Callable[[str, str], tuple[str, float]]
+
+
 class CrashMonitor(FileSystemEventHandler):
     """ Monitor a crash directory """
 
     def __init__(
-        self, output_dir: str,
-        run_official: Callable[[str, str], str],
-        run_custom: Callable[[str, str], str]
+        self, output_dir: str, run_official: Runner, run_custom: Runner
     ) -> None:
         """ Constructor """
         super().__init__()
@@ -39,15 +41,36 @@ class CrashMonitor(FileSystemEventHandler):
 
     def process(self, crash_file: str) -> None:
         """ Process a crash file """
+        assert os.path.isfile(crash_file), crash_file
         print(f"\n=====> Detected new crash case: {crash_file}")
+        crash_case = os.path.join(self.output_dir, "crash_case")
+        # crash_reduce = os.path.join(self.output_dir, "crash_reduce")
+        crash_official = os.path.join(self.output_dir, "crash_official")
+        shutil.copyfile(crash_file, crash_case)
+        crash_case_size = os.path.getsize(crash_case)
+        print(f"====> Copied {crash_case_size} bytes to {crash_case}")
+
+        print("====> Running official afl-tmin...")
+        official_output, official_time = self.run_official(
+            crash_case, crash_official)
+        print("====> Official afl-tmin statistics:")
+        crash_official_size = os.path.getsize(crash_official)
+        official_percent = (1 - crash_official_size / crash_case_size) * 100
+        print(f"====> Final file size: {crash_official_size} " +
+              f"({official_percent:.1f}% reduction)")
+        print(f"====> Elapsed time: {official_time:.2f} seconds")
+
+        os.remove(crash_case)
+        os.remove(crash_official)
 
 
 def run_afl_tmin(
     afl_tmin_binary: str, test_case_dir: str, execute_line: list[str]
-) -> Callable[[str, str], str]:
+) -> Runner:
     """ Run afl-tmin, return the output """
-    def runner(crash_case: str, crash_reduce: str) -> str:
+    def runner(crash_case: str, crash_reduce: str) -> tuple[str, float]:
         # Create process
+        start = timer()
         process = subprocess.Popen(
             [afl_tmin_binary, "-i", crash_case, "-o", crash_reduce,
              "-d", test_case_dir, "--"] + execute_line,
@@ -83,6 +106,7 @@ def run_afl_tmin(
         # Get process return code
         return_code = process.wait()
         selector.close()
+        end = timer()
 
         if return_code != 0:
             print(f"Warning: the process returned {return_code}!")
@@ -91,7 +115,7 @@ def run_afl_tmin(
         output = buf.getvalue()
         buf.close()
 
-        return output
+        return output, end - start
     return runner
 
 
@@ -135,6 +159,8 @@ def main() -> None:
     try:
         while observer.is_alive():
             observer.join(1)
+    except KeyboardInterrupt:
+        print("Ending...")
     finally:
         observer.stop()
         observer.join()
