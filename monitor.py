@@ -10,7 +10,7 @@ import selectors
 import sys
 import shutil
 import subprocess
-from typing import Any, Callable, TextIO, override
+from typing import Any, Callable, TextIO
 from watchdog.events import FileSystemEventHandler, FileCreatedEvent, \
     FileSystemEvent
 from watchdog.observers import Observer
@@ -31,13 +31,15 @@ class CrashMonitor(FileSystemEventHandler):
         self.run_official = run_official
         self.run_custom = run_custom
 
-    @override
     def on_created(self, event: FileSystemEvent) -> None:
         """ Event representing file/dir creation """
         if not isinstance(event, FileCreatedEvent):
             return
-        path = event.src_path
-        print(f"\n=====> Detected new crash case: {path}")
+        self.process(event.src_path)
+
+    def process(self, crash_file: str) -> None:
+        """ Process a crash file """
+        print(f"\n=====> Detected new crash case: {crash_file}")
 
 
 def run_afl_tmin(
@@ -113,14 +115,19 @@ def main() -> None:
         shutil.rmtree(args.output_dir)
     os.makedirs(args.output_dir)
 
-    observer = Observer()
-    observer.schedule(
-        CrashMonitor(
-            args.output_dir,
-            run_afl_tmin(args.official, args.test_case_dir, args.binary),
-            run_afl_tmin(args.custom, args.test_case_dir, args.binary)
-        ), args.input_dir, recursive=False
+    monitor = CrashMonitor(
+        args.output_dir,
+        run_afl_tmin(args.official, args.test_case_dir, args.binary),
+        run_afl_tmin(args.custom, args.test_case_dir, args.binary)
     )
+    print("====> Loading initial crashes...")
+    for crash_file in os.listdir(args.input_dir):
+        if os.path.isfile(crash_file):
+            monitor.process(crash_file)
+
+    print("\n====> Observing crash directory...")
+    observer = Observer()
+    observer.schedule(monitor, args.input_dir, recursive=False)
     observer.start()
     try:
         while observer.is_alive():
