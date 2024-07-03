@@ -44,7 +44,7 @@ class CrashMonitor(FileSystemEventHandler):
         assert os.path.isfile(crash_file), crash_file
         print(f"\n=====> Detected new crash case: {crash_file}")
         crash_case = os.path.join(self.output_dir, "crash_case")
-        # crash_reduce = os.path.join(self.output_dir, "crash_reduce")
+        crash_reduce = os.path.join(self.output_dir, "crash_reduce")
         crash_official = os.path.join(self.output_dir, "crash_official")
         shutil.copyfile(crash_file, crash_case)
         crash_case_size = os.path.getsize(crash_case)
@@ -60,20 +60,26 @@ class CrashMonitor(FileSystemEventHandler):
               f"({official_percent:.1f}% reduction)")
         print(f"====> Elapsed time: {official_time:.2f} seconds")
 
-        os.remove(crash_case)
-        os.remove(crash_official)
+        if os.path.exists(crash_case):
+            os.remove(crash_case)
+        if os.path.exists(crash_reduce):
+            os.remove(crash_reduce)
+        if os.path.exists(crash_official):
+            os.remove(crash_official)
 
 
 def run_afl_tmin(
-    afl_tmin_binary: str, test_case_dir: str, execute_line: list[str]
+    afl_tmin_binary: str, test_case_dir: str, execute_line: list[str],
+    add_d_option: bool = False
 ) -> Runner:
     """ Run afl-tmin, return the output """
     def runner(crash_case: str, crash_reduce: str) -> tuple[str, float]:
         # Create process
         start = timer()
         process = subprocess.Popen(
-            [afl_tmin_binary, "-i", crash_case, "-o", crash_reduce,
-             "-d", test_case_dir, "--"] + execute_line,
+            [afl_tmin_binary, "-i", crash_case, "-o", crash_reduce] + (
+                ["-d", test_case_dir] if add_d_option else []
+            ) + ["--"] + execute_line,
             bufsize=1, universal_newlines=True,
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT
         )
@@ -142,7 +148,7 @@ def main() -> None:
     monitor = CrashMonitor(
         args.output_dir,
         run_afl_tmin(args.official, args.test_case_dir, args.binary),
-        run_afl_tmin(args.custom, args.test_case_dir, args.binary)
+        run_afl_tmin(args.custom, args.test_case_dir, args.binary, True)
     )
     print("====> Loading initial crashes...")
     for crash_file in os.listdir(args.input_dir):
