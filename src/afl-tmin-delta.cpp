@@ -1,6 +1,7 @@
 #include <iostream>
 #include <fstream>
 #include <vector>
+#include <unordered_map>
 #include <string>
 #include <string_view>
 #include <cstddef>
@@ -21,7 +22,7 @@ using std::cout;
 namespace fs = std::filesystem;
 
 bool verbose = false;
-std::vector<byte_array> input_testcases;
+std::unordered_map<std::string, byte_array> input_testcases;
 void* server = nullptr;
 
 // sbfl.cpp
@@ -354,15 +355,18 @@ byte_array find_closest_initial(const byte_array& crash)
     if (input_testcases.empty()) throw std::logic_error("No testcases specified!");
     std::size_t min_dist = static_cast<std::size_t>(-1);
     const byte_array* ptr_max{nullptr};
-    for (const auto& testcase : input_testcases)
+    std::string best_name;
+    for (const auto& [name, testcase] : input_testcases)
     {
         auto [dist, _] = edit_distance(testcase, crash);
         if (dist < min_dist)
         {
             min_dist = dist;
             ptr_max = &testcase;
+            best_name = name;
         }
     }
+    cout << "Test case chosen: " << best_name << "\n";
     return *ptr_max;
 }
 
@@ -460,7 +464,7 @@ void add_testcase(const fs::path& path)
     byte_array contents(file_size);
     file_in.read(reinterpret_cast<char*>(contents.data()), file_size);
     cout << "Successfully read " << file_size << " bytes from " << path << "\n";
-    input_testcases.push_back(std::move(contents));
+    input_testcases[path] = std::move(contents);
 }
 
 extern "C" void read_testcase_dir(void* dir_ptr)
@@ -469,7 +473,7 @@ extern "C" void read_testcase_dir(void* dir_ptr)
     if (dir_ptr == nullptr)
     {
         cout << "Warning: No test case specified. Use \"hello\" as default test case.\n";
-        input_testcases.push_back(to_bytes("hello"));
+        input_testcases["Unknown"] = to_bytes("hello");
         return;
     }
     std::string dir_str(static_cast<char*>(dir_ptr));

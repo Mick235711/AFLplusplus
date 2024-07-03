@@ -5,16 +5,114 @@
 # Libraries
 import argparse
 import os
+import json
 import shutil
 import subprocess
 from timeit import default_timer as timer
-from typing import Callable
+from typing import Any, Callable
 from watchdog.events import FileSystemEventHandler, FileCreatedEvent, \
     FileSystemEvent
 from watchdog.observers import Observer
 
 
 Runner = Callable[[str, str], tuple[str, float]]
+Processor = Callable[[str], dict[str, Any]]
+
+
+def process_custom(output_dir: str) -> dict[str, Any]:
+    """ Process bitmaps """
+    os.remove(os.path.join(output_dir, "orig-bitmap.bin"))
+    os.remove(os.path.join(output_dir, "final-bitmap.bin"))
+    return {}
+
+
+def process_output(output: str) -> dict[str, Any]:
+    """ Process normal afl-tmin output """
+    data: dict[str, Any] = {}
+    split_index = output.find("File size reduced by")
+    assert split_index != -1, output
+    summary = output[split_index:].strip()
+    output = output[:split_index].strip()
+    for line in output.split("\n"):
+        line = line.strip()
+        index = line.find(",") + 1
+        index2 = -1
+        key: str | None = None
+        is_multi = True
+        if "Block normalization complete" in line:
+            index2 = line.find("bytes replaced", index)
+            key = "bytes_replaced"
+        elif "Block removal complete" in line:
+            index2 = line.find("bytes deleted", index)
+            key = "bytes_deleted"
+        elif "Symbol minimization finished" in line:
+            index2 = line.find("symbols", index)
+            key = "symbols_replaced"
+        elif "Character minimization done" in line:
+            index2 = line.find("bytes replaced", index)
+            key = "character_bytes_replaced"
+        else:
+            index = line.find(":") + 1
+            index2 = len(line)
+            is_multi = False
+            if line.startswith("Test case chosen"):
+                data["test_case"] = line[index:].strip()
+                continue
+            elif line.startswith("Original test case length"):
+                key = "test_case_size"
+            elif line.startswith("Original distance"):
+                key = "original_distance"
+            elif line.startswith("Optimal distance"):
+                key = "optimal_distance"
+            elif line.startswith("Success!"):
+                index = line.find("to") + 2
+                is_multi = True
+                key = "length_trace"
+            elif "length = " in line:
+                index = line.find("=") + 1
+                if "(diff" in line:
+                    assert line.endswith(")"), line
+                    index2 = line.find("(diff")
+                    index3 = line.find("=", index2) + 1
+                    data["map_diff"] = int(line[index3:-1].strip())
+                key = line[:line.find("length = ")].strip() + "_length"
+            elif line.startswith("Total different byte count"):
+                key = "map_byte_difference"
+            elif line.startswith("abs diff = "):
+                for section in line.split(","):
+                    assert "diff =" in section, line
+                    index = line.find("diff =")
+                    key = "map_" + line[:index].strip() + "_diff"
+                    data[key] = int(line[line.find("=") + 1:].strip())
+                continue
+        if key is None:
+            continue
+        assert index != -1 and index2 != -1, line
+        if not is_multi:
+            data[key] = int(line[index:index2].strip())
+            continue
+        if key not in data:
+            data[key] = []
+        data[key].append(int(line[index:index2].strip()))
+
+    # Process summary
+    for line in summary.split("\n"):
+        line = line.strip()
+        index = line.find(":") + 1
+        index2 = len(line)
+        key = None
+        if line.startswith("Number of execs done"):
+            key = "num_exec"
+        elif line.startswith("Fruitless execs"):
+            index = line.find("path=") + 5
+            index2 = line.find("crash=")
+            key = "fruitless_exec"
+        if key is None:
+            continue
+        assert index != -1 and index2 != -1, line
+        data[key] = int(line[index:index2].strip())
+
+    return data
 
 
 class CrashMonitor(FileSystemEventHandler):
@@ -27,8 +125,11 @@ class CrashMonitor(FileSystemEventHandler):
         super().__init__()
         assert os.path.isdir(output_dir), output_dir
         self.output_dir = output_dir
-        self.run_official = run_official
-        self.run_custom = run_custom
+        self.binary_list: dict[str, tuple[Runner, Processor | None]] = {
+            "Official afl-tmin": (run_official, None),
+            "Custom afl-tmin": (run_custom, process_custom)
+        }
+        self.data: list[dict[str, Any]] = []
 
     def on_created(self, event: FileSystemEvent) -> None:
         """ Event representing file/dir creation """
@@ -42,28 +143,51 @@ class CrashMonitor(FileSystemEventHandler):
         print(f"\n===> Detected new crash case: {crash_file}")
         crash_case = os.path.join(self.output_dir, "crash_case")
         crash_reduce = os.path.join(self.output_dir, "crash_reduce")
-        crash_official = os.path.join(self.output_dir, "crash_official")
         shutil.copyfile(crash_file, crash_case)
         crash_case_size = os.path.getsize(crash_case)
         print(f"===> Copied {crash_case_size} bytes to {crash_case}")
 
-        print("===> Running official afl-tmin...")
-        official_output, official_time = self.run_official(
-            crash_case, crash_official)
-        print("===> Official afl-tmin statistics:")
-        crash_official_size = os.path.getsize(crash_official)
-        official_percent = (1 - crash_official_size / crash_case_size) * 100
-        print(f"===> Final file size: {crash_official_size} " +
-              f"({official_percent:.1f}% reduction)")
-        print(f"===> Elapsed time: {official_time:.2f} seconds")
-        print(official_output)
+        run_data: dict[str, tuple[str, float, int, dict[str, Any] | None]] = {}
+        for name, (binary, processor) in self.binary_list.items():
+            print(f"\n===> Running {name.lower()}...")
+            output, elapsed = binary(crash_case, crash_reduce)
+            print(output)
+            run_data[name] = (
+                output, elapsed, os.path.getsize(crash_reduce),
+                None if processor is None else processor(self.output_dir)
+            )
+
+        self.data.append({
+            "file_name": os.path.basename(crash_file),
+            "original_size": crash_case_size,
+            "data": {}
+        })
+
+        print()
+        for name, (output, elapsed, reduced_size, data) in run_data.items():
+            print(f"\n===> {name} statistics:")
+            percent = (1 - reduced_size / crash_case_size) * 100
+            print(f"===> Final file size: {reduced_size} " +
+                  f"({percent:.1f}% reduction)")
+            print(f"===> Elapsed time: {elapsed:.2f} seconds")
+            self.data[-1]["data"][name] = {
+                "reduced_size": reduced_size,
+                "elapsed_seconds": elapsed
+            }.update(process_output(output))
+            if data is not None:
+                self.data[-1]["data"][name].update(data)
 
         if os.path.exists(crash_case):
             os.remove(crash_case)
         if os.path.exists(crash_reduce):
             os.remove(crash_reduce)
-        if os.path.exists(crash_official):
-            os.remove(crash_official)
+
+    def write_json(self, output_file: str) -> None:
+        """ Write data to JSON file """
+        output_file = os.path.join(self.output_dir, output_file)
+        with open(output_file, "w") as fp:
+            json.dump(self.data, fp, indent=4)
+        print(f"Results written to {output_file}.")
 
 
 def run_afl_tmin(
@@ -134,6 +258,7 @@ def main() -> None:
             observer.join(1)
     except KeyboardInterrupt:
         print("Ending...")
+        monitor.write_json("results.json")
     finally:
         observer.stop()
         observer.join()
