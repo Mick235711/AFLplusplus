@@ -116,6 +116,11 @@ def process_output(output: str) -> dict[str, Any]:
     return data
 
 
+def read_file(file_path: str) -> str:
+    """ Read file contents """
+    return str(Path(file_path).read_bytes())[2:-1]
+
+
 class CrashMonitor(FileSystemEventHandler):
     """ Monitor a crash directory """
 
@@ -160,15 +165,13 @@ class CrashMonitor(FileSystemEventHandler):
             run_data[name] = (
                 output, elapsed, os.path.getsize(crash_reduce),
                 None if processor is None else processor(self.output_dir),
-                Path(crash_reduce).read_text() if self.store_content else None
+                read_file(crash_reduce) if self.store_content else None
             )
 
-        self.data.append({
-            "file_name": os.path.basename(crash_file),
-            "original_size": crash_case_size,
-        })
+        self.data.append({"file_name": os.path.basename(crash_file)})
         if self.store_content:
-            self.data[-1]["original"] = Path(crash_case).read_text()
+            self.data[-1]["original"] = read_file(crash_case)
+        self.data[-1]["original_size"] = crash_case_size
         self.data[-1]["data"] = {}
 
         print()
@@ -180,12 +183,13 @@ class CrashMonitor(FileSystemEventHandler):
             print(f"===> Final file size: {reduced_size} " +
                   f"({percent:.1f}% reduction)")
             print(f"===> Elapsed time: {elapsed:.2f} seconds")
+            self.data[-1]["data"][name] = {}
             if content is not None:
                 self.data[-1]["data"][name]["reduced"] = content
-            self.data[-1]["data"][name] = {
+            self.data[-1]["data"][name].update({
                 "reduced_size": reduced_size,
                 "elapsed_seconds": elapsed
-            }
+            })
             self.data[-1]["data"][name].update(process_output(output))
             if data is not None:
                 self.data[-1]["data"][name].update(data)
