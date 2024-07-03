@@ -42,23 +42,24 @@ class CrashMonitor(FileSystemEventHandler):
     def process(self, crash_file: str) -> None:
         """ Process a crash file """
         assert os.path.isfile(crash_file), crash_file
-        print(f"\n=====> Detected new crash case: {crash_file}")
+        print(f"\n===> Detected new crash case: {crash_file}")
         crash_case = os.path.join(self.output_dir, "crash_case")
         crash_reduce = os.path.join(self.output_dir, "crash_reduce")
         crash_official = os.path.join(self.output_dir, "crash_official")
         shutil.copyfile(crash_file, crash_case)
         crash_case_size = os.path.getsize(crash_case)
-        print(f"====> Copied {crash_case_size} bytes to {crash_case}")
+        print(f"===> Copied {crash_case_size} bytes to {crash_case}")
 
-        print("====> Running official afl-tmin...")
+        print("===> Running official afl-tmin...")
         official_output, official_time = self.run_official(
             crash_case, crash_official)
-        print("====> Official afl-tmin statistics:")
+        print("===> Official afl-tmin statistics:")
         crash_official_size = os.path.getsize(crash_official)
         official_percent = (1 - crash_official_size / crash_case_size) * 100
-        print(f"====> Final file size: {crash_official_size} " +
+        print(f"===> Final file size: {crash_official_size} " +
               f"({official_percent:.1f}% reduction)")
-        print(f"====> Elapsed time: {official_time:.2f} seconds")
+        print(f"===> Elapsed time: {official_time:.2f} seconds")
+        print(official_output)
 
         if os.path.exists(crash_case):
             os.remove(crash_case)
@@ -150,7 +151,7 @@ def main() -> None:
         run_afl_tmin(args.official, args.test_case_dir, args.binary),
         run_afl_tmin(args.custom, args.test_case_dir, args.binary, True)
     )
-    print("====> Loading initial crashes...")
+    print("===> Loading initial crashes...")
     for crash_file in os.listdir(args.input_dir):
         if crash_file.lower() == "readme.txt":
             continue
@@ -158,7 +159,7 @@ def main() -> None:
         if os.path.isfile(real_path):
             monitor.process(real_path)
 
-    print("\n====> Observing crash directory...")
+    print("\n===> Observing crash directory...")
     observer = Observer()
     observer.schedule(monitor, args.input_dir, recursive=False)
     observer.start()
