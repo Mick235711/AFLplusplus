@@ -14,7 +14,7 @@ from watchdog.events import FileSystemEventHandler, FileCreatedEvent, \
 from watchdog.observers import Observer
 
 
-Runner = Callable[[str, str], float]
+Runner = Callable[[str, str], tuple[str, float]]
 
 
 class CrashMonitor(FileSystemEventHandler):
@@ -48,13 +48,15 @@ class CrashMonitor(FileSystemEventHandler):
         print(f"===> Copied {crash_case_size} bytes to {crash_case}")
 
         print("===> Running official afl-tmin...")
-        official_time = self.run_official(crash_case, crash_official)
+        official_output, official_time = self.run_official(
+            crash_case, crash_official)
         print("===> Official afl-tmin statistics:")
         crash_official_size = os.path.getsize(crash_official)
         official_percent = (1 - crash_official_size / crash_case_size) * 100
         print(f"===> Final file size: {crash_official_size} " +
               f"({official_percent:.1f}% reduction)")
         print(f"===> Elapsed time: {official_time:.2f} seconds")
+        print(official_output)
 
         if os.path.exists(crash_case):
             os.remove(crash_case)
@@ -69,14 +71,15 @@ def run_afl_tmin(
     add_d_option: bool = False
 ) -> Runner:
     """ Run afl-tmin, return the output """
-    def runner(crash_case: str, crash_reduce: str) -> float:
+    def runner(crash_case: str, crash_reduce: str) -> tuple[str, float]:
         # Create process
         start = timer()
         process = subprocess.run(
             [afl_tmin_binary, "-i", crash_case, "-o", crash_reduce] + (
                 ["-d", test_case_dir] if add_d_option else []
             ) + ["--"] + execute_line,
-            universal_newlines=True
+            universal_newlines=True, text=True,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT
         )
         end = timer()
 
@@ -85,7 +88,7 @@ def run_afl_tmin(
         if return_code != 0:
             print(f"Warning: the process returned {return_code}!")
 
-        return end - start
+        return process.stdout, end - start
     return runner
 
 
