@@ -407,6 +407,11 @@ extern "C" void entry_point(void* fsrv, std::byte** mem, int* len_ptr)
         cout << "Original test case length: " << orig.size() << "\n";
         cout << "Original crash length: " << crash.size() << "\n";
     }
+    if (!crash_predicate(crash))
+    {
+        cout << crash << "\n";
+        throw std::logic_error("Crash does not crash!");
+    }
     clear_bitmap(server);
     crash_predicate(orig);
     auto map1 = copy_bitmap();
@@ -430,7 +435,11 @@ extern "C" void entry_point(void* fsrv, std::byte** mem, int* len_ptr)
     else cout << "Optimal result length: " << result2.size() << "\n";
 
     clear_bitmap(server);
-    crash_predicate(result2);
+    if (!crash_predicate(result2))
+    {
+        cout << result2 << "\n";
+        throw std::logic_error("Result does not crash!");
+    }
     auto map2 = copy_bitmap();
     {
         std::ofstream out{"final-bitmap.bin", std::ios::out | std::ios::binary};

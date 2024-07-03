@@ -276,11 +276,11 @@ def main() -> None:
     print("===> Loading initial crashes...")
     cnt = 0
     for crash_file in os.listdir(args.input_dir):
-        cnt += 1
         if crash_file.lower() == "readme.txt":
             continue
         real_path = os.path.join(args.input_dir, crash_file)
         if os.path.isfile(real_path):
+            cnt += 1
             monitor.process(
                 real_path,
                 None if args.export is None
