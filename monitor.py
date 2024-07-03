@@ -6,10 +6,13 @@
 import argparse
 import io
 import os
+import pty
 import selectors
 import sys
 import shutil
 import subprocess
+import termios
+import tty
 from timeit import default_timer as timer
 from typing import Any, Callable, TextIO
 from watchdog.events import FileSystemEventHandler, FileCreatedEvent, \
@@ -75,15 +78,21 @@ def run_afl_tmin(
 ) -> Runner:
     """ Run afl-tmin, return the output """
     def runner(crash_case: str, crash_reduce: str) -> tuple[str, float]:
+        # Save original tty setting then set it to raw mode
+        old_tty = termios.tcgetattr(sys.stdin)
+        tty.setraw(sys.stdin.fileno())
+
+        # Open pseudo-terminal to interact with subprocess
+        master_fd, slave_fd = pty.openpty()
+
         # Create process
         start = timer()
         process = subprocess.Popen(
-            " ".join(
-                [afl_tmin_binary, "-i", crash_case, "-o", crash_reduce] + (
-                    ["-d", test_case_dir] if add_d_option else []
-                ) + ["--"] + execute_line
-            ), bufsize=1, universal_newlines=True, shell=True,
-            stdout=subprocess.PIPE, stderr=subprocess.STDOUT
+            [afl_tmin_binary, "-i", crash_case, "-o", crash_reduce] + (
+                ["-d", test_case_dir] if add_d_option else []
+            ) + ["--"] + execute_line,
+            bufsize=1, universal_newlines=True,
+            stdout=slave_fd, stderr=slave_fd
         )
 
         # Create callback function for process output
@@ -92,16 +101,13 @@ def run_afl_tmin(
         def handle_output(stream: TextIO, _: Any) -> None:
             # Because the process' output is line buffered, there's only ever
             # one line to read when this function is called
-            line = stream.readline()
+            line = os.fdopen(stream).readline()
             buf.write(line)
             sys.stdout.write(line)
 
         # Register callback for an "available for read" event
         selector = selectors.DefaultSelector()
-        selector.register(
-            process.stdout,  # type: ignore
-            selectors.EVENT_READ, handle_output
-        )
+        selector.register(master_fd, selectors.EVENT_READ, handle_output)
 
         # Loop until subprocess is terminated
         while process.poll() is None:
@@ -122,6 +128,9 @@ def run_afl_tmin(
         # Store buffered output
         output = buf.getvalue()
         buf.close()
+
+        # Restore tty settings back
+        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_tty)
 
         return output, end - start
     return runner
