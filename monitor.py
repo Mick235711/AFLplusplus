@@ -68,7 +68,7 @@ def process_output(output: str) -> dict[str, Any]:
             elif line.startswith("Success!"):
                 index = line.find("to") + 2
                 is_multi = True
-                key = "length_trace"
+                key = "distance_trace"
             elif line.startswith("map") and "length = " in line:
                 index = line.find("=") + 1
                 if "(diff" in line:
