@@ -78,10 +78,11 @@ def run_afl_tmin(
         # Create process
         start = timer()
         process = subprocess.Popen(
-            [afl_tmin_binary, "-i", crash_case, "-o", crash_reduce] + (
-                ["-d", test_case_dir] if add_d_option else []
-            ) + ["--"] + execute_line,
-            bufsize=1, universal_newlines=True,
+            " ".join(
+                [afl_tmin_binary, "-i", crash_case, "-o", crash_reduce] + (
+                    ["-d", test_case_dir] if add_d_option else []
+                ) + ["--"] + execute_line
+            ), bufsize=1, universal_newlines=True, shell=True,
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT
         )
 
