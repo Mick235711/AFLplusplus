@@ -145,7 +145,8 @@ class CrashMonitor(FileSystemEventHandler):
             return
         self.process(event.src_path)
 
-    def process(self, crash_file: str, export_path: str | None = None) -> None:
+    def process(self, crash_file: str, testcase_index: int,
+                export_path: str | None = None) -> None:
         """ Process a crash file """
         assert os.path.isfile(crash_file), crash_file
         print(f"\n===> Detected new crash case: {crash_file}")
@@ -173,7 +174,10 @@ class CrashMonitor(FileSystemEventHandler):
                 read_file(crash_reduce) if self.store_content else None
             )
 
-        self.data.append({"file_name": os.path.basename(crash_file)})
+        self.data.append({
+            "file_name": os.path.basename(crash_file),
+            "testcase_index": testcase_index
+        })
         if self.store_content:
             self.data[-1]["original"] = read_file(crash_case)
         self.data[-1]["original_size"] = crash_case_size
@@ -275,14 +279,14 @@ def main() -> None:
     )
     print("===> Loading initial crashes...")
     cnt = 0
-    for crash_file in os.listdir(args.input_dir):
+    for crash_file in sorted(os.listdir(args.input_dir)):
         if crash_file.lower() == "readme.txt":
             continue
         real_path = os.path.join(args.input_dir, crash_file)
         if os.path.isfile(real_path):
             cnt += 1
             monitor.process(
-                real_path,
+                real_path, cnt,
                 None if args.export is None
                 else os.path.join(args.export, str(cnt))
             )
